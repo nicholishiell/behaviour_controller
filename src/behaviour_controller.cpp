@@ -23,7 +23,7 @@ bool commandRecieved = false;
 void PatternFormationBehaviourCallBack(const bupimo_msgs::VelocityCommand::ConstPtr& msg){
   commandRecieved = true;
 
-  pfBearing = msg->bearing*M_PI/180.;
+  pfBearing = msg->bearing;
   pfSpeed = msg->linearSpeed;
   
 }
@@ -31,7 +31,7 @@ void PatternFormationBehaviourCallBack(const bupimo_msgs::VelocityCommand::Const
 void ObstacleAvoidanceBehaviourCallBack(const bupimo_msgs::VelocityCommand::ConstPtr& msg){
   commandRecieved = true;
   
-  voaBearing = msg->bearing*M_PI/180.;
+  voaBearing = msg->bearing;
   voaSpeed = msg->linearSpeed;
 }
 
