@@ -2,6 +2,7 @@
 #include "std_msgs/Float64.h"
 #include "bupimo_msgs/VelocityCommand.h"
 #include "geometry_msgs/Twist.h"
+#include "Vector2d.h"
 
 #include <stdio.h>
 #include <string>
@@ -12,27 +13,24 @@ using namespace std;
 float currentHeading = 0.;
 float currentLinearVel = 0.;
 
-float pfBearing = 0.;
-float pfSpeed = 0.;
-
-float voaBearing = 0.;
-float voaSpeed = 0.;
+Vector2d * patternFormationVector = new Vector2d(0., 0.);
+Vector2d * obstacleAvoidanceVector = new Vector2d(0., 0.);
 
 bool commandRecieved = false;
 
 void PatternFormationBehaviourCallBack(const bupimo_msgs::VelocityCommand::ConstPtr& msg){
   commandRecieved = true;
-
-  pfBearing = msg->bearing;
-  pfSpeed = msg->linearSpeed;
+  
+  patternFormationVector = new Vector2d(msg->bearing*M_PI/180.);
+  patternFormationVector = ScalarMultiplyVector(msg->linearSpeed, patternFormationVector);
   
 }
 
 void ObstacleAvoidanceBehaviourCallBack(const bupimo_msgs::VelocityCommand::ConstPtr& msg){
   commandRecieved = true;
-  
-  voaBearing = msg->bearing;
-  voaSpeed = msg->linearSpeed;
+
+  obstacleAvoidanceVector = new Vector2d(msg->bearing*M_PI/180.);
+  obstacleAvoidanceVector = ScalarMultiplyVector(msg->linearSpeed, obstacleAvoidanceVector);
 }
 
 
@@ -57,7 +55,7 @@ int main(int argc, char **argv){
   ros::Subscriber currentHeading_Sub = n.subscribe("currentHeading", 1000, CurrentHeadingCallback);
   ros::Subscriber currentLinearVel_Sub = n.subscribe("currentLinearVel", 1000, CurrentLinearVelCallback);
   
-  ros::Rate loop_rate(10);
+  ros::Rate loop_rate(50);
 
   while (ros::ok()){
 
@@ -66,28 +64,43 @@ int main(int argc, char **argv){
       ros::spinOnce();
       loop_rate.sleep();
       continue;
-    } 
-
-    float targetHeading;
-    float targetLinearVel;
-
-    if(voaSpeed > 0.){
-      targetHeading = voaBearing;
-      targetLinearVel = voaSpeed;
-    }
-    else{
-      targetHeading = pfBearing;
-      targetLinearVel = pfSpeed;
     }
 
+    //Vector2d * commandVector = AddVectors(patternFormationVector, obstacleAvoidanceVector);
+
+    Vector2d * commandVector;
+    if(obstacleAvoidanceVector->GetNorm() > 0.) commandVector = obstacleAvoidanceVector;
+    else  commandVector = patternFormationVector;
+    
+    if( commandVector->GetNorm() > 1.) commandVector->Normalize();
+    
+    float targetHeading = commandVector->GetAngle();
+    float targetLinearVel = commandVector->GetNorm();
+    
+    // Change to degrees
+    targetHeading = targetHeading * 180. / M_PI;
     
     geometry_msgs::Twist msg;
 
-    // Use a proportional controller 
-    float headingError = -1.*(targetHeading - currentHeading) ;
+    // Use a proportional controller to determine v and w
+    /*float headingError = -1.*(targetHeading - currentHeading) ;
       
     if(fabs(headingError) > 180.){
       headingError = 180. - headingError;
+    }
+    
+    // Now convert to radians (per second)
+    headingError = headingError * M_PI/180.;*/
+
+    float headingError = currentHeading - targetHeading;
+    if( headingError > 180.){
+      headingError = headingError - 360.;
+    }
+    else if(headingError < -180){
+      headingError = headingError + 360;
+    }
+    else{
+      headingError = headingError;
     }
     
     // Now convert to radians (per second)
@@ -105,15 +118,9 @@ int main(int argc, char **argv){
     // publish twist msg.
     twist_pub.publish(msg);
     
-
-    //printf("TargetHeading = %f\t TargetSpeed = %f\n", targetHeading, targetLinearVel);
-
     ros::spinOnce();
 
     loop_rate.sleep();
   }
   return 0;
 };
-
-
-
